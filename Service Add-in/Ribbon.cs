@@ -192,7 +192,8 @@ namespace Service_Add_in
             if (localcalendar.CurrentFolder.Name == "Calendar" ||
                 sharedcalendar.CurrentFolder.Name != "")
             {
-                if (localcalendar.Selection.Count > 0)
+                if (localcalendar.Selection.Count > 0 &&
+                    localcalendar.Selection[1].Subject != "")
                 {
                     Object localobject = Globals.ThisAddIn.Application.ActiveExplorer().Selection[1];
                     if (localobject is Outlook.AppointmentItem)
@@ -202,8 +203,8 @@ namespace Service_Add_in
                         myapptitem_ = localapptitem;
                     }
                 }
-
-                if (sharedcalendar.Selection.Count > 0)
+                else if (sharedcalendar.Selection.Count > 0 &&
+                    sharedcalendar.Selection[1].Subject != "")
                 {
                     Object sharedobject = sharedcalendar.Selection[1];
                     if (sharedobject is Outlook.AppointmentItem)
@@ -212,6 +213,10 @@ namespace Service_Add_in
                             (sharedobject as Outlook.AppointmentItem);
                         myapptitem_ = sharedapptitem;
                     }
+                }
+                else
+                {
+                    myapptitem_ = null;
                 }
             }
         }
