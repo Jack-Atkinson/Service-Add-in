@@ -8,6 +8,7 @@ using System.Text;
 using Office = Microsoft.Office.Core;
 using Outlook = Microsoft.Office.Interop.Outlook;
 using System.Windows.Forms;
+using System.Text.RegularExpressions;
 
 // TODO:  Follow these steps to enable the Ribbon (XML) item:
 
@@ -106,29 +107,23 @@ namespace Service_Add_in
             {
                 DateTime currenttime = DateTime.Now;
                 DateTime lastcheckin = new DateTime();
+
+                if(!ValidPunch(status, ref lastcheckin))
+                {
+                    MessageBox.Show("You need to check " + (status == "IN" ? "out" : "in") +
+                                    " before you can check " + (status == "IN" ? "in" : "out") + " again",
+                                    "Alert",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information);
+                    return;
+                }
+
                 string punchstatus = Environment.NewLine + DateTime.Now.ToString() + " - " + status;
 
-                switch (status)
+                if (status == "OUT")
                 {
-                    case "IN":
-                        if (LastPunchSame("IN", ref lastcheckin))
-                        {
-                            return;
-                        }
-                        break;
-                    case "OUT":
-                        if (LastPunchSame("OUT", ref lastcheckin))
-                        {
-                            return;
-                        }
-                        else
-                        {
-                            double minutes = currenttime.Subtract(lastcheckin).Minutes;
-                            punchstatus += " Total: " + minutes;
-                        }
-                        break;
-                    default:
-                        break;
+                    double minutes = currenttime.Subtract(lastcheckin).Minutes;
+                    punchstatus += " Total: " + minutes + " minutes";
                 }
 
                 myapptitem_.Body += punchstatus;
@@ -141,44 +136,81 @@ namespace Service_Add_in
             }
         }
 
-        public bool LastPunchSame(string status, ref DateTime lastcheckin)
+        public bool ValidPunch(string status, ref DateTime lastcheckin)
         {
-            string body = myapptitem_.Body;
-            if (body == null)
-                return false;
+            string apptbody = myapptitem_.Body;
+            if (apptbody == null)
+                return true;
+            
+            string regexpattern =
+                "(\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s\\d{1,2}:\\d{1,2}:\\d{1,2}\\s[AP]M)\\s-\\s(IN|OUT)(\\sTotal:\\s\\d+\\sminutes)?";
 
-            string[] lines = body.Replace("\r", "").Split('\n');
-            if (lines.Length != 0 && lines[lines.Length - 1].Length > 20)
+            string[] lines = apptbody.Replace("\r", "").Split('\n');
+
+            string lastpunch = "";
+
+            if (lines.Length > 0)
             {
-                string lastpunch = lines[lines.Length - 1];
-                lastcheckin = DateTime.Parse(lastpunch.Substring(0, 20));
-                if (lastpunch.Contains(status))
+                string lastline = lines[lines.Length - 1];
+
+                if (Regex.IsMatch(lastline, regexpattern))
                 {
-                    MessageBox.Show("You need to check " + (status == "IN" ? "out" : "in") +
-                                    " before you can check " + (status == "IN" ? "in" : "out") + " again",
-                                    "Alert",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Information);
-                    return true;
+                    MatchCollection matches = Regex.Matches(lastline, regexpattern);
+                    lastpunch = matches[0].Groups[2].Value;
+                    lastcheckin = DateTime.Parse(matches[0].Groups[1].Value);
                 }
+
+                if (status == "OUT")
+                {
+                    if (lastpunch == "" || lastpunch == status)
+                        return false;
+                }
+                else if (status == "IN")
+                {
+                    if (lastpunch == status)
+                        return false;
+                }
+                else
+                    return false;
             }
-            return false;
+            return true;
         }
 
         private void CurrentExplorer_Event()
         {
-            Outlook.MAPIFolder selectedFolder =
-                Globals.ThisAddIn.Application.ActiveExplorer().CurrentFolder;
-            if (selectedFolder.Name == "Calendar")
+            Outlook.Application myapp = Globals.ThisAddIn.Application;
+
+            Outlook.Explorer localcalendar =
+                myapp.ActiveExplorer(); //For local calender appointments.
+            
+            Outlook.Explorer sharedcalendar =
+                myapp.Session.GetSharedDefaultFolder(
+                    myapp.Session.CreateRecipient(myapp.Session.CurrentUser.Address), //our own shared folder
+                    Microsoft.Office.Interop.Outlook.OlDefaultFolders.olFolderCalendar
+                    ).Application.ActiveExplorer(); 
+
+            if (localcalendar.CurrentFolder.Name == "Calendar" ||
+                sharedcalendar.CurrentFolder.Name != "")
             {
-                if (Globals.ThisAddIn.Application.ActiveExplorer().Selection.Count > 0)
+                if (localcalendar.Selection.Count > 0)
                 {
-                    Object selObject = Globals.ThisAddIn.Application.ActiveExplorer().Selection[1];
-                    if (selObject is Outlook.AppointmentItem)
+                    Object localobject = Globals.ThisAddIn.Application.ActiveExplorer().Selection[1];
+                    if (localobject is Outlook.AppointmentItem)
                     {
-                        Outlook.AppointmentItem apptItem =
-                            (selObject as Outlook.AppointmentItem);
-                        myapptitem_ = apptItem;
+                        Outlook.AppointmentItem localapptitem =
+                            (localobject as Outlook.AppointmentItem);
+                        myapptitem_ = localapptitem;
+                    }
+                }
+
+                if (sharedcalendar.Selection.Count > 0)
+                {
+                    Object sharedobject = sharedcalendar.Selection[1];
+                    if (sharedobject is Outlook.AppointmentItem)
+                    {
+                        Outlook.AppointmentItem sharedapptitem =
+                            (sharedobject as Outlook.AppointmentItem);
+                        myapptitem_ = sharedapptitem;
                     }
                 }
             }
