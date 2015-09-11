@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<customUI onLoad="Ribbon_Load" xmlns="http://schemas.microsoft.com/office/2009/07/customui">
+    <ribbon>
+        <tabs>
+            <tab id="service_tab" label="Service Add-in">
+                <group id="group1" label="Functions">
+                    <button id="button1" onAction="punchin_Click" label="Punch In" showImage="false" />
+                    <button id="button2" onAction="punchout_Click" label="Punch Out" showImage="false" />
+                </group>
+            </tab>
+        </tabs>
+    </ribbon>
+</customUI>
