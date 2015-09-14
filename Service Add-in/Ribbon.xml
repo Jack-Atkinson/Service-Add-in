@@ -6,6 +6,7 @@
                 <group id="group1" label="Functions">
                     <button id="button1" onAction="punchin_Click" label="Punch In" showImage="false" />
                     <button id="button2" onAction="punchout_Click" label="Punch Out" showImage="false" />
+                    <button id="button3" onAction="getTotal_Click" label="Get Total" showImage="false" />
                 </group>
             </tab>
         </tabs>

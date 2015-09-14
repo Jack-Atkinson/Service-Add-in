@@ -38,6 +38,10 @@ namespace Service_Add_in
         ThisAddIn addIn;
         Outlook.AppointmentItem myapptitem_;
         Outlook.Explorer currentExplorer;
+        string regexpattern =
+            "(\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s" +
+            "\\d{1,2}:\\d{1,2}:\\d{1,2}\\s[AP]M)\\s" +
+            "-\\s(IN|OUT)(\\sTotal:\\s\\d+\\sminutes)?";
 
         public Ribbon()
         {
@@ -101,6 +105,59 @@ namespace Service_Add_in
             AddDateTextToBody("OUT");
         }
 
+        public void getTotal_Click(Office.IRibbonControl control)
+        {
+            string[] times = getPunchTimes();
+            if (times[0] == "")
+                return;
+
+            if (times[times.Length - 1].Contains("IN"))
+            {
+                MessageBox.Show("You need to punch out before you can get the total time!",
+                                "Alert",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                return;
+            }
+            
+            MatchCollection matches = null;
+            string punchtype = null;
+            DateTime intime = new DateTime();
+            DateTime outtime = new DateTime();
+            List<int> differences = new List<int>();
+
+            foreach (string time in times.ToArray())
+            {
+                matches = Regex.Matches(time, regexpattern);
+                punchtype = matches[0].Groups[2].Value;
+                switch(punchtype)
+                {
+                    case "IN":
+                        intime = DateTime.Parse(matches[0].Groups[1].Value);
+                        break;
+                    case "OUT":
+                        outtime = DateTime.Parse(matches[0].Groups[1].Value);
+                        differences.Add(outtime.Subtract(intime).Minutes);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            int totaltime = differences.Sum();
+            TimeSpan total = TimeSpan.FromMinutes(totaltime);
+            string message = Environment.NewLine + "Total: " +
+                             total.Hours.ToString() + " Hour(s) " +
+                             total.Minutes.ToString() + " Minute(s)";
+            myapptitem_.Body += message;
+            myapptitem_.Save();
+
+            MessageBox.Show(message,
+                            "Alert",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+
+        }
+
         public void AddDateTextToBody(string status)
         {
             if (myapptitem_ != null)
@@ -123,7 +180,7 @@ namespace Service_Add_in
                 if (status == "OUT")
                 {
                     double minutes = currenttime.Subtract(lastcheckin).Minutes;
-                    punchstatus += " Total: " + minutes + " minutes";
+                    punchstatus += " Session time: " + minutes + " Minute(s)";
                 }
 
                 myapptitem_.Body += punchstatus;
@@ -138,20 +195,14 @@ namespace Service_Add_in
 
         public bool ValidPunch(string status, ref DateTime lastcheckin)
         {
-            string apptbody = myapptitem_.Body;
-            if (apptbody == null)
-                return true;
-            
-            string regexpattern =
-                "(\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s\\d{1,2}:\\d{1,2}:\\d{1,2}\\s[AP]M)\\s-\\s(IN|OUT)(\\sTotal:\\s\\d+\\sminutes)?";
 
-            string[] lines = apptbody.Replace("\r", "").Split('\n');
+            string[] times = getPunchTimes();
 
             string lastpunch = "";
-
-            if (lines.Length > 0)
+            
+            if (times[0] != "")
             {
-                string lastline = lines[lines.Length - 1];
+                string lastline = times[times.Length - 1];
 
                 if (Regex.IsMatch(lastline, regexpattern))
                 {
@@ -174,6 +225,22 @@ namespace Service_Add_in
                     return false;
             }
             return true;
+        }
+
+        public string[] getPunchTimes()
+        {
+            string[] times = new string[] { "" };
+            
+            if (myapptitem_ == null)
+                return times;
+
+            string apptbody = myapptitem_.Body;
+
+            times = apptbody.Replace("\r", "").Split('\n');
+
+            times = times.Where(time => Regex.IsMatch(time, regexpattern)).ToArray();
+
+            return times;
         }
 
         private void CurrentExplorer_Event()
