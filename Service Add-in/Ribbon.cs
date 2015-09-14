@@ -109,7 +109,13 @@ namespace Service_Add_in
         {
             string[] times = getPunchTimes();
             if (times[0] == "")
+            {
+                MessageBox.Show("No times in calendar item",
+                                "Alert",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
                 return;
+            }
 
             if (times[times.Length - 1].Contains("IN"))
             {
@@ -145,9 +151,10 @@ namespace Service_Add_in
             }
             int totaltime = differences.Sum();
             TimeSpan total = TimeSpan.FromMinutes(totaltime);
-            string message = Environment.NewLine + "Total: " +
+            string message = Environment.NewLine + Environment.NewLine + "Total: " +
                              total.Hours.ToString() + " Hour(s) " +
-                             total.Minutes.ToString() + " Minute(s)";
+                             total.Minutes.ToString() + " Minute(s)" +
+                             Environment.NewLine + Environment.NewLine;
             myapptitem_.Body += message;
             myapptitem_.Save();
 
@@ -199,31 +206,29 @@ namespace Service_Add_in
             string[] times = getPunchTimes();
 
             string lastpunch = "";
-            
-            if (times[0] != "")
+
+
+            string lastline = times[times.Length - 1];
+
+            if (Regex.IsMatch(lastline, regexpattern))
             {
-                string lastline = times[times.Length - 1];
+                MatchCollection matches = Regex.Matches(lastline, regexpattern);
+                lastpunch = matches[0].Groups[2].Value;
+                lastcheckin = DateTime.Parse(matches[0].Groups[1].Value);
+            }
 
-                if (Regex.IsMatch(lastline, regexpattern))
-                {
-                    MatchCollection matches = Regex.Matches(lastline, regexpattern);
-                    lastpunch = matches[0].Groups[2].Value;
-                    lastcheckin = DateTime.Parse(matches[0].Groups[1].Value);
-                }
-
-                if (status == "OUT")
-                {
-                    if (lastpunch == "" || lastpunch == status)
-                        return false;
-                }
-                else if (status == "IN")
-                {
-                    if (lastpunch == status)
-                        return false;
-                }
-                else
+            if (status == "OUT")
+            {
+                if (lastpunch == "" || lastpunch == status)
                     return false;
             }
+            else if (status == "IN")
+            {
+                if (lastpunch == status)
+                    return false;
+            }
+            else
+                return false;
             return true;
         }
 
@@ -235,6 +240,9 @@ namespace Service_Add_in
                 return times;
 
             string apptbody = myapptitem_.Body;
+
+            if (apptbody == null)
+                return times;
 
             times = apptbody.Replace("\r", "").Split('\n');
 

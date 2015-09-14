@@ -32,13 +32,13 @@
     <TargetFrameworkProfile />
     <IsWebBootstrapper>False</IsWebBootstrapper>
     <BootstrapperEnabled>true</BootstrapperEnabled>
-    <PublishUrl>C:\Users\jatkinson\Service Add-in 2010\</PublishUrl>
+    <PublishUrl>\\mainfs2\shared\service\</PublishUrl>
     <InstallUrl />
     <TargetCulture>en</TargetCulture>
-    <ApplicationVersion>1.0.0.8</ApplicationVersion>
+    <ApplicationVersion>1.0.0.12</ApplicationVersion>
     <AutoIncrementApplicationRevision>true</AutoIncrementApplicationRevision>
     <UpdateEnabled>true</UpdateEnabled>
-    <UpdateInterval>7</UpdateInterval>
+    <UpdateInterval>0</UpdateInterval>
     <UpdateIntervalUnits>days</UpdateIntervalUnits>
     <ProductName>Service Add-in</ProductName>
     <PublisherName />
