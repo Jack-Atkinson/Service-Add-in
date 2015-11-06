@@ -41,7 +41,7 @@ namespace Service_Add_in
         string regexpattern =
             "(\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s" +
             "\\d{1,2}:\\d{1,2}:\\d{1,2}\\s[AP]M)\\s" +
-            "-\\s(IN|OUT)(\\sTotal:\\s\\d+\\sminutes)?";
+            "[-|–]\\s(IN|OUT)(\\sSession\\stime:\\s\\d+\\sMinutes)?";
 
         public Ribbon()
         {
@@ -108,12 +108,12 @@ namespace Service_Add_in
         public void getTotal_Click(Office.IRibbonControl control)
         {
             string[] times = getPunchTimes();
-            if (times[0] == "")
+            if (times[0].Equals(null))
             {
                 MessageBox.Show("No times in calendar item",
                                 "Alert",
                                 MessageBoxButtons.OK,
-                                MessageBoxIcon.Information);
+                                MessageBoxIcon.Exclamation);
                 return;
             }
 
@@ -122,52 +122,56 @@ namespace Service_Add_in
                 MessageBox.Show("You need to punch out before you can get the total time!",
                                 "Alert",
                                 MessageBoxButtons.OK,
-                                MessageBoxIcon.Information);
+                                MessageBoxIcon.Exclamation);
                 return;
             }
+
+            DialogResult result =
+                MessageBox.Show("Are you sure you want to calculate total time?",
+                                "Question",
+                                MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Question);
+            if (result != DialogResult.Yes)
+                return;
             
-            MatchCollection matches = null;
-            string punchtype = null;
+            MatchCollection matches;
+            string punchtype;
             DateTime intime = new DateTime();
             DateTime outtime = new DateTime();
-            List<int> differences = new List<int>();
+            List<double> differences = new List<double>();
 
             foreach (string time in times.ToArray())
             {
                 matches = Regex.Matches(time, regexpattern);
                 punchtype = matches[0].Groups[2].Value;
-                switch(punchtype)
+                switch(punchtype) //this snippet looks a little...wrong, must test possible cases that could cause errors
                 {
                     case "IN":
                         intime = DateTime.Parse(matches[0].Groups[1].Value);
                         break;
                     case "OUT":
                         outtime = DateTime.Parse(matches[0].Groups[1].Value);
-                        differences.Add(outtime.Subtract(intime).Minutes);
+                        differences.Add(GetHoursWorked(intime, outtime));
                         break;
                     default:
                         break;
                 }
             }
-            int totaltime = differences.Sum();
-            TimeSpan total = TimeSpan.FromMinutes(totaltime);
-            string message = Environment.NewLine + Environment.NewLine + "Total: " +
-                             total.Hours.ToString() + " Hour(s) " +
-                             total.Minutes.ToString() + " Minute(s)" +
-                             Environment.NewLine + Environment.NewLine;
+
+            double totalTime = differences.Sum();
+            string message = string.Format("\n\nTotal: {0:0.00} Hour(s)\n\n", totalTime);
             myapptitem_.Body += message;
             myapptitem_.Save();
 
             MessageBox.Show(message,
-                            "Alert",
+                            "Information",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Information);
-
         }
 
         public void AddDateTextToBody(string status)
         {
-            if (myapptitem_ != null)
+            if (!myapptitem_.Equals(null))
             {
                 DateTime currenttime = DateTime.Now;
                 DateTime lastcheckin = new DateTime();
@@ -178,23 +182,24 @@ namespace Service_Add_in
                                     " before you can check " + (status == "IN" ? "in" : "out") + " again",
                                     "Alert",
                                     MessageBoxButtons.OK,
-                                    MessageBoxIcon.Information);
+                                    MessageBoxIcon.Exclamation);
                     return;
                 }
 
                 string punchstatus = Environment.NewLine + DateTime.Now.ToString() + " - " + status;
 
-                if (status == "OUT")
+                if (status.Equals("OUT"))
                 {
-                    double minutes = currenttime.Subtract(lastcheckin).Minutes;
-                    punchstatus += " Session time: " + minutes + " Minute(s)";
+                    double totalTime = GetHoursWorked(lastcheckin, currenttime);
+                    punchstatus += string.Format(" Session time: {0:0.00} Hour(s)", totalTime);
                 }
 
-                myapptitem_.Body += punchstatus;
 
+                myapptitem_.Body += punchstatus;
+                
                 myapptitem_.Save();
                 MessageBox.Show("You punched " + status + " at " + DateTime.Now.ToString(),
-                                "Alert",
+                                "Information",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Information);
             }
@@ -202,27 +207,23 @@ namespace Service_Add_in
 
         public bool ValidPunch(string status, ref DateTime lastcheckin)
         {
-
             string[] times = getPunchTimes();
-
             string lastpunch = "";
-
-
             string lastline = times[times.Length - 1];
 
-            if (Regex.IsMatch(lastline, regexpattern))
+            if (!Equals(lastline, null) && Regex.IsMatch(lastline, regexpattern))
             {
                 MatchCollection matches = Regex.Matches(lastline, regexpattern);
                 lastpunch = matches[0].Groups[2].Value;
                 lastcheckin = DateTime.Parse(matches[0].Groups[1].Value);
             }
 
-            if (status == "OUT")
+            if (status.Equals("OUT"))
             {
-                if (lastpunch == "" || lastpunch == status)
+                if (lastpunch.Equals("") || lastpunch.Equals(status))
                     return false;
             }
-            else if (status == "IN")
+            else if (status.Equals("IN"))
             {
                 if (lastpunch == status)
                     return false;
@@ -234,21 +235,55 @@ namespace Service_Add_in
 
         public string[] getPunchTimes()
         {
-            string[] times = new string[] { "" };
-            
-            if (myapptitem_ == null)
+            string[] times = new string[1];
+
+            if (Equals(myapptitem_, null))
                 return times;
 
             string apptbody = myapptitem_.Body;
 
-            if (apptbody == null)
+            if (Equals(apptbody, null))
                 return times;
 
             times = apptbody.Replace("\r", "").Split('\n');
 
             times = times.Where(time => Regex.IsMatch(time, regexpattern)).ToArray();
 
+            if (times.Length == 0)
+                times = new string[1];
+
             return times;
+        }
+
+        private double GetHoursWorked(DateTime startTime, DateTime endTime)
+        {
+            startTime = startTime.AddSeconds(-startTime.Second); //zero out seconds
+            endTime = endTime.AddSeconds(-endTime.Second);
+            startTime = startTime.AddMilliseconds(-startTime.Millisecond); //zero out milliseconds
+            endTime = endTime.AddMilliseconds(-endTime.Millisecond);
+
+            DateTime startMins = RoundTime(startTime);
+            DateTime endMins = RoundTime(endTime);
+
+            double minutesWorked = endMins.Subtract(startMins).TotalMinutes;
+
+            return Convert.ToDouble(TimeSpan.FromMinutes(minutesWorked).TotalHours);
+        }
+
+        private DateTime RoundTime(DateTime time)
+        {
+            int threshold = 15 - (time.Minute % 15);
+            DateTime minsWorked;
+            if (threshold > 7)
+                return minsWorked = time.Add(TimeSpan.FromMinutes(threshold - 15));
+            else
+                return minsWorked = time.Add(TimeSpan.FromMinutes(threshold));
+        }
+
+
+        private DateTime RoundUp(DateTime dt, TimeSpan d)
+        {
+            return new DateTime(((dt.Ticks + d.Ticks - 1) / d.Ticks) * d.Ticks);
         }
 
         private void CurrentExplorer_Event()
@@ -261,7 +296,7 @@ namespace Service_Add_in
             Outlook.Explorer sharedcalendar =
                 myapp.Session.GetSharedDefaultFolder(
                     myapp.Session.CreateRecipient(myapp.Session.CurrentUser.Address), //our own shared folder
-                    Microsoft.Office.Interop.Outlook.OlDefaultFolders.olFolderCalendar
+                    Outlook.OlDefaultFolders.olFolderCalendar
                     ).Application.ActiveExplorer(); 
 
             if (localcalendar.CurrentFolder.Name == "Calendar" ||
@@ -270,7 +305,7 @@ namespace Service_Add_in
                 if (localcalendar.Selection.Count > 0 &&
                     localcalendar.Selection[1].Subject != "")
                 {
-                    Object localobject = Globals.ThisAddIn.Application.ActiveExplorer().Selection[1];
+                    object localobject = Globals.ThisAddIn.Application.ActiveExplorer().Selection[1];
                     if (localobject is Outlook.AppointmentItem)
                     {
                         Outlook.AppointmentItem localapptitem =
@@ -281,7 +316,7 @@ namespace Service_Add_in
                 else if (sharedcalendar.Selection.Count > 0 &&
                     sharedcalendar.Selection[1].Subject != "")
                 {
-                    Object sharedobject = sharedcalendar.Selection[1];
+                    object sharedobject = sharedcalendar.Selection[1];
                     if (sharedobject is Outlook.AppointmentItem)
                     {
                         Outlook.AppointmentItem sharedapptitem =
